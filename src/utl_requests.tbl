@@ -1,0 +1,60 @@
+-- Create table
+create table UTL_REQUESTS
+(
+  req_id                    NUMBER not null,
+  req_url                   VARCHAR2(4000),
+  req_http_method           VARCHAR2(64),
+  req_http_version          VARCHAR2(64),
+  resp_http_status_code     NUMBER,
+  req_status                NUMBER(1) not null,
+  req_start_timestamp       TIMESTAMP(6) default sysdate,
+  req_end_timestamp         TIMESTAMP(6),
+  req_data_length           NUMBER default 0 not null,
+  req_http_detailed_sqlcode NUMBER,
+  req_start_user            VARCHAR2(30) default user not null,
+  req_end_user              VARCHAR2(30),
+  req_step_name             VARCHAR2(30),
+  req_timeout               NUMBER,
+  req_data                  CLOB,
+  resp_data                 CLOB,
+  resp_data_length          NUMBER default 0 not null,
+  who_called_req_name       VARCHAR2(30),
+  who_called_req_owner      VARCHAR2(30),
+  who_called_req_lineno     NUMBER,
+  who_called_req_caller_t   VARCHAR2(30),
+  req_body_charset          VARCHAR2(30),
+  format_call_stack         VARCHAR2(4000)
+)
+tablespace UTLREQUEST
+  pctfree 10
+  initrans 1
+  maxtrans 255
+  storage
+  (
+    initial 64K
+    next 1M
+    minextents 1
+    maxextents unlimited
+  );
+-- Create/Recreate primary, unique and foreign key constraints 
+alter table TSK.UTL_REQUESTS
+  add constraint PK_UTL_REQ primary key (REQ_ID)
+  using index 
+  tablespace UTLREQUEST
+  pctfree 10
+  initrans 2
+  maxtrans 255
+  storage
+  (
+    initial 64K
+    next 1M
+    minextents 1
+    maxextents unlimited
+  );
+alter table TSK.UTL_REQUESTS
+  add constraint FK_UTL_REQ_SQL_CODE_01 foreign key (REQ_HTTP_DETAILED_SQLCODE)
+  references TSK.SQL_CODES (SQLCODE)
+  disable
+  novalidate;
+-- Grant/Revoke object privileges 
+grant select on TSK.UTL_REQUESTS to TLITM;
