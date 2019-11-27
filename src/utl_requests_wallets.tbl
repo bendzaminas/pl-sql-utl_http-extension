@@ -1,0 +1,34 @@
+-- Create table
+create table UTL_REQUESTS_WALLETS
+(
+  req_wallet_id      NUMBER not null,
+  req_wallet_path    VARCHAR2(4000),
+  req_wallet_pasword VARCHAR2(4000),
+  req_id             NUMBER
+)
+tablespace UTLREQUEST
+  pctfree 10
+  initrans 1
+  maxtrans 255
+  storage
+  (
+    initial 64K
+    next 1M
+    minextents 1
+    maxextents unlimited
+  );
+-- Create/Recreate primary, unique and foreign key constraints 
+alter table UTL_REQUESTS_WALLETS
+  add constraint PK_UTL_REQ_WALLET primary key (REQ_WALLET_ID)
+  using index 
+  tablespace UTLREQUEST
+  pctfree 10
+  initrans 2
+  maxtrans 255
+  storage
+  (
+    initial 64K
+    next 1M
+    minextents 1
+    maxextents unlimited
+  );
