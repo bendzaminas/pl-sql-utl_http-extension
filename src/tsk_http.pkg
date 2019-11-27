@@ -1,0 +1,1322 @@
+create or replace package tsk.tsk_http is
+
+  init_failed            EXCEPTION; -- The UTL_HTTP pkg initialization failed
+  request_failed         EXCEPTION; -- The HTTP request failed (Any HTTP request or response interface when detailed_exception is disabled)
+  bad_argument           EXCEPTION; -- A bad argument was passed to an API (Any HTTP request or response interface when detailed_exception is disabled)
+  bad_url                EXCEPTION; -- The URL is bad (BEGIN_REQUEST, when detailed_exception is enabled)
+  protocol_error         EXCEPTION; -- A HTTP protocol error occurred (SET_HEADER, GET_RESPONSE, READ_RAW, READ_TEXT, and READ_LINE, when detailed_exception is enabled)
+  unknown_scheme         EXCEPTION; -- The scheme of the URL is unknown (BEGIN_REQUEST and GET_RESPONSE, when detailed_exception is enabled)
+  header_not_found       EXCEPTION; -- The HTTP header is not found (GET_HEADER, GET_HEADER_BY_NAME, when detailed_exception is enabled)
+  end_of_body            EXCEPTION; -- The end of response body is reached (READ_RAW, READ_TEXT, and READ_LINE, when detailed_exception is enabled)
+  illegal_call           EXCEPTION; -- The API call is illegal at this stage (SET_HEADER, SET_AUTHENTICATION, and SET_PERSISTENT_CONN_SUPPORT, when detailed_exception is enabled)
+  http_client_error      EXCEPTION; -- A 4xx response code is returned (GET_RESPONSE, BEGIN_REQUEST when detailed_exception is enabled)
+  http_server_error      EXCEPTION; -- A 5xx response code is returned (GET_RESPONSE, BEGIN_REQUEST when detailed_exception is enabled)
+  too_many_requests      EXCEPTION; -- Too many open requests or responses (BEGIN_REQUEST, when detailed_exception is enabled)
+  partial_multibyte_char EXCEPTION; -- A partial multi-byte character found (READ_TEXT and READ_LINE, when detailed_exception is enabled)
+  transfer_timeout       EXCEPTION; -- Transfer time-out occurred (READ_TEXT and READ_LINE, when detailed_exception is enabled)
+  network_access_denied  EXCEPTION; -- Network access denied
+
+  --range - 20000 .. - 20999
+  PRAGMA EXCEPTION_INIT(init_failed, -29272);
+  PRAGMA EXCEPTION_INIT(request_failed, -29273);
+  PRAGMA EXCEPTION_INIT(bad_argument, -29261);
+  PRAGMA EXCEPTION_INIT(bad_url, -29262);
+  PRAGMA EXCEPTION_INIT(protocol_error, -29263);
+  PRAGMA EXCEPTION_INIT(unknown_scheme, -29264);
+  PRAGMA EXCEPTION_INIT(header_not_found, -29265);
+  PRAGMA EXCEPTION_INIT(end_of_body, -29266);
+  PRAGMA EXCEPTION_INIT(illegal_call, -29267);
+  PRAGMA EXCEPTION_INIT(http_client_error, -29268);
+  PRAGMA EXCEPTION_INIT(http_server_error, -29269);
+  PRAGMA EXCEPTION_INIT(too_many_requests, -29270);
+  PRAGMA EXCEPTION_INIT(partial_multibyte_char, -29275);
+  PRAGMA EXCEPTION_INIT(transfer_timeout, -29276);
+  PRAGMA EXCEPTION_INIT(network_access_denied, -24247);
+
+  -- HTTP status codes of a HTTP response as defined in HTTP 1.1
+  HTTP_CONTINUE                  CONSTANT PLS_INTEGER := 100;
+  HTTP_SWITCHING_PROTOCOLS       CONSTANT PLS_INTEGER := 101;
+  HTTP_OK                        CONSTANT PLS_INTEGER := 200;
+  HTTP_CREATED                   CONSTANT PLS_INTEGER := 201;
+  HTTP_ACCEPTED                  CONSTANT PLS_INTEGER := 202;
+  HTTP_NON_AUTHORITATIVE_INFO    CONSTANT PLS_INTEGER := 203;
+  HTTP_NO_CONTENT                CONSTANT PLS_INTEGER := 204;
+  HTTP_RESET_CONTENT             CONSTANT PLS_INTEGER := 205;
+  HTTP_PARTIAL_CONTENT           CONSTANT PLS_INTEGER := 206;
+  HTTP_MULTIPLE_CHOICES          CONSTANT PLS_INTEGER := 300;
+  HTTP_MOVED_PERMANENTLY         CONSTANT PLS_INTEGER := 301;
+  HTTP_FOUND                     CONSTANT PLS_INTEGER := 302;
+  HTTP_SEE_OTHER                 CONSTANT PLS_INTEGER := 303;
+  HTTP_NOT_MODIFIED              CONSTANT PLS_INTEGER := 304;
+  HTTP_USE_PROXY                 CONSTANT PLS_INTEGER := 305;
+  HTTP_TEMPORARY_REDIRECT        CONSTANT PLS_INTEGER := 307;
+  HTTP_BAD_REQUEST               CONSTANT PLS_INTEGER := 400;
+  HTTP_UNAUTHORIZED              CONSTANT PLS_INTEGER := 401;
+  HTTP_PAYMENT_REQUIRED          CONSTANT PLS_INTEGER := 402;
+  HTTP_FORBIDDEN                 CONSTANT PLS_INTEGER := 403;
+  HTTP_NOT_FOUND                 CONSTANT PLS_INTEGER := 404;
+  HTTP_NOT_ACCEPTABLE            CONSTANT PLS_INTEGER := 406;
+  HTTP_PROXY_AUTH_REQUIRED       CONSTANT PLS_INTEGER := 407;
+  HTTP_REQUEST_TIME_OUT          CONSTANT PLS_INTEGER := 408;
+  HTTP_CONFLICT                  CONSTANT PLS_INTEGER := 409;
+  HTTP_GONE                      CONSTANT PLS_INTEGER := 410;
+  HTTP_LENGTH_REQUIRED           CONSTANT PLS_INTEGER := 411;
+  HTTP_PRECONDITION_FAILED       CONSTANT PLS_INTEGER := 412;
+  HTTP_REQUEST_ENTITY_TOO_LARGE  CONSTANT PLS_INTEGER := 413;
+  HTTP_REQUEST_URI_TOO_LARGE     CONSTANT PLS_INTEGER := 414;
+  HTTP_UNSUPPORTED_MEDIA_TYPE    CONSTANT PLS_INTEGER := 415;
+  HTTP_REQ_RANGE_NOT_SATISFIABLE CONSTANT PLS_INTEGER := 416;
+  HTTP_EXPECTATION_FAILED        CONSTANT PLS_INTEGER := 417;
+  HTTP_NOT_IMPLEMENTED           CONSTANT PLS_INTEGER := 501;
+  HTTP_BAD_GATEWAY               CONSTANT PLS_INTEGER := 502;
+  HTTP_SERVICE_UNAVAILABLE       CONSTANT PLS_INTEGER := 503;
+  HTTP_GATEWAY_TIME_OUT          CONSTANT PLS_INTEGER := 504;
+  HTTP_VERSION_NOT_SUPPORTED     CONSTANT PLS_INTEGER := 505;
+
+  HTTP_VERSION_1_1 VARCHAR2(8) := UTL_HTTP.HTTP_VERSION_1_1;
+
+  owa_version CONSTANT VARCHAR2(64) := '1.0.0';
+
+  TYPE t_req is record(
+    req_id      PLS_INTEGER,
+    req         utl_http.req,
+    req_no      PLS_INTEGER,
+    req_timeout PLS_INTEGER DEFAULT 60);
+
+  -- A PL/SQL record type that represents a HTTP request
+
+  req t_req;
+
+  type t_resp is record(
+    req_id  PLS_INTEGER,
+    resp    utl_http.resp,
+    resp_no pls_integer,
+    req_no  pls_integer);
+
+  -- A PL/SQL record type that represents a HTTP request
+
+  resp t_resp;
+
+  TYPE t_html_pieces IS RECORD(
+    html_pieces utl_http.html_pieces);
+
+  PROCEDURE end_request(p_r IN OUT tsk_http.t_req);
+
+  PROCEDURE write_text(p_r    IN OUT NOCOPY tsk_http.t_req,
+                       p_data IN VARCHAR2 CHARACTER SET ANY_CS DEFAULT NULL);
+
+  PROCEDURE write_line(p_r    IN OUT NOCOPY tsk_http.t_req,
+                       p_data IN VARCHAR2 CHARACTER SET ANY_CS);
+
+  PROCEDURE write_raw(p_r IN OUT NOCOPY tsk_http.t_req, p_data IN RAW);
+
+  FUNCTION get_response(p_r                    IN OUT NOCOPY tsk_http.t_req,
+                        p_return_info_response BOOLEAN DEFAULT FALSE)
+    RETURN tsk_http.t_resp;
+
+  FUNCTION begin_request(p_url          IN VARCHAR2,
+                         p_method       IN VARCHAR2 DEFAULT 'GET',
+                         p_http_version IN VARCHAR2 DEFAULT utl_http.HTTP_VERSION_1_1)
+    RETURN tsk_http.t_req;
+
+  PROCEDURE end_response(p_r IN OUT NOCOPY tsk_http.t_resp);
+
+  PROCEDURE set_header(p_r     IN OUT NOCOPY tsk_http.t_req,
+                       p_name  IN VARCHAR2,
+                       p_value IN VARCHAR2 DEFAULT NULL);
+
+  PROCEDURE set_transfer_timeout(p_timeout IN PLS_INTEGER DEFAULT 60);
+
+  PROCEDURE set_body_charset(p_charset IN VARCHAR2 DEFAULT NULL);
+
+  PROCEDURE set_response_error_check(enable IN BOOLEAN DEFAULT FALSE);
+
+  PROCEDURE read_text(p_r    IN OUT NOCOPY tsk_http.t_resp,
+                      p_data OUT NOCOPY VARCHAR2 CHARACTER SET ANY_CS,
+                      p_len  IN PLS_INTEGER DEFAULT NULL);
+
+  PROCEDURE read_line(p_r           IN OUT NOCOPY tsk_http.t_resp,
+                      p_data        OUT NOCOPY VARCHAR2 CHARACTER SET ANY_CS,
+                      p_remove_crlf IN BOOLEAN DEFAULT FALSE);
+
+  PROCEDURE read_raw(p_r    IN OUT NOCOPY tsk_http.t_resp,
+                     p_data OUT NOCOPY RAW,
+                     p_len  IN PLS_INTEGER DEFAULT NULL);
+
+  PROCEDURE set_wallet(p_path     IN VARCHAR2,
+                       p_password IN VARCHAR2 DEFAULT NULL);
+
+  PROCEDURE set_authentication(p_r         IN OUT NOCOPY tsk_http.t_req,
+                               p_username  IN VARCHAR2,
+                               p_password  IN VARCHAR2 DEFAULT NULL,
+                               p_scheme    IN VARCHAR2 DEFAULT 'Basic',
+                               p_for_proxy IN BOOLEAN DEFAULT FALSE);
+
+  PROCEDURE get_header_by_name(p_r     IN OUT NOCOPY tsk_http.t_resp,
+                               p_name  IN VARCHAR2,
+                               p_value OUT NOCOPY VARCHAR2,
+                               p_n     IN PLS_INTEGER DEFAULT 1);
+
+  PROCEDURE get_authentication(p_r         IN OUT NOCOPY tsk_http.t_resp,
+                               p_scheme    OUT NOCOPY VARCHAR2,
+                               p_realm     OUT NOCOPY VARCHAR2,
+                               p_for_proxy IN BOOLEAN DEFAULT FALSE);
+
+  FUNCTION get_detailed_sqlerrm RETURN VARCHAR2;
+
+  FUNCTION request(p_url             IN VARCHAR2,
+                   p_proxy           in VARCHAR2 DEFAULT NULL,
+                   p_wallet_path     IN VARCHAR2 DEFAULT NULL,
+                   p_wallet_password IN VARCHAR2 DEFAULT NULL)
+    RETURN VARCHAR2;
+
+  FUNCTION request_pieces(p_url             IN VARCHAR2,
+                          p_max_pieces      IN NATURAL DEFAULT 32767,
+                          p_proxy           in VARCHAR2 DEFAULT NULL,
+                          p_wallet_path     IN VARCHAR2 DEFAULT NULL,
+                          p_wallet_password IN VARCHAR2 DEFAULT NULL)
+    RETURN t_html_pieces;
+
+  FUNCTION repeat_request(p_req_id IN PLS_INTEGER) RETURN PLS_INTEGER;
+
+end tsk_http;
+/
+
+create or replace package body tsk.tsk_http is
+
+  PACKAGE_NAME               constant varchar2(30) := 'TSK_HTTP';
+  MAX_LINESIZE               constant binary_integer := 32767;
+  MAX_RAW_BUFFER_LENGTH      constant binary_integer := 32767;
+  UTL_REQUEST_STATUS_FAILED  constant binary_integer := -1;
+  UTL_REQUEST_STATUS_ENDED   constant binary_integer := 2;
+  UTL_REQUEST_STATUS_STARTED constant binary_integer := 1;
+  UTL_REQUEST_STATUS_PENDING constant binary_integer := 0;
+
+  subtype t_raw_buffer is raw(32767);
+  subtype t_txt_buffer is varchar2(32767);
+
+  --g_utl_request_id pls_integer;
+
+  g_req_id PLS_INTEGER;
+
+  g_http_transfer_timeout PLS_INTEGER DEFAULT 60;
+  g_wallet_path           VARCHAR2(4000);
+  g_wallet_password       VARCHAR2(4000);
+
+  g_who_called_req_owner    VARCHAR2(30);
+  g_who_called_req_name     VARCHAR2(30);
+  g_who_called_req_lineno   NUMBER;
+  g_who_called_req_caller_t VARCHAR2(30);
+
+  g_req_body_charset VARCHAR2(30);
+
+  PROCEDURE save_req_step_as_failed(p_step_name IN VARCHAR2,
+                                    p_req_id    IN PLS_INTEGER) IS
+    PRAGMA AUTONOMOUS_TRANSACTION;
+  BEGIN
+    UPDATE utl_requests ur
+       SET ur.req_status                = UTL_REQUEST_STATUS_PENDING,
+           ur.req_step_name             = p_step_name,
+           ur.req_http_detailed_sqlcode = utl_http.get_detailed_sqlcode,
+           ur.req_end_timestamp         = SYSTIMESTAMP,
+           ur.req_end_user              = USER
+     WHERE ur.req_id = p_req_id
+       AND rownum = 1;
+  
+    COMMIT WORK;
+  
+  END;
+
+  PROCEDURE save_req_as_failed(p_step_name IN VARCHAR2,
+                               p_req_id    IN PLS_INTEGER) IS
+    PRAGMA AUTONOMOUS_TRANSACTION;
+  BEGIN
+  
+    UPDATE utl_requests ur
+       SET ur.req_status                = UTL_REQUEST_STATUS_FAILED,
+           ur.req_step_name             = p_step_name,
+           ur.req_http_detailed_sqlcode = utl_http.get_detailed_sqlcode,
+           ur.req_end_timestamp         = SYSTIMESTAMP,
+           ur.req_end_user              = USER
+     WHERE ur.req_id = p_req_id
+       and rownum = 1;
+  
+    COMMIT WORK;
+  
+  END;
+
+  PROCEDURE end_request(p_r IN OUT tsk_http.t_req) IS
+  
+    PRAGMA AUTONOMOUS_TRANSACTION;
+  
+    l_step_name CONSTANT VARCHAR2(30) := 'END_RESPONSE';
+  
+  BEGIN
+  
+    BEGIN
+    
+      utl_http.end_request(p_r.req);
+    
+    EXCEPTION
+      WHEN OTHERS THEN
+      
+        tsk_http.save_req_as_failed(l_step_name, p_r.req_id);
+        RAISE;
+    END;
+  
+    UPDATE utl_requests ur
+       SET ur.req_status                = UTL_REQUEST_STATUS_ENDED,
+           ur.req_step_name             = l_step_name,
+           ur.req_http_detailed_sqlcode = utl_http.get_detailed_sqlcode,
+           ur.req_end_timestamp         = SYSTIMESTAMP,
+           ur.req_end_user              = USER
+     WHERE ur.req_id = p_r.req_id
+       AND rownum = 1;
+  
+    COMMIT WORK;
+  
+  END;
+
+  PROCEDURE write_text(p_r    IN OUT NOCOPY tsk_http.t_req,
+                       p_data IN VARCHAR2 CHARACTER SET ANY_CS DEFAULT NULL) IS
+    PRAGMA AUTONOMOUS_TRANSACTION;
+    l_step_name CONSTANT VARCHAR2(30) := 'WRITE_TEXT';
+  
+  BEGIN
+  
+    DECLARE
+    
+      l_req_data_length PLS_INTEGER;
+    
+      l_req_data CLOB;
+    
+    BEGIN
+    
+      dbms_lob.createtemporary(l_req_data, TRUE);
+    
+      tsk_lob.append(l_req_data, to_clob(p_data));
+    
+      l_req_data_length := length(l_req_data);
+    
+      UPDATE utl_requests ur
+         SET ur.req_data        = ur.req_data || l_req_data,
+             ur.req_data_length = nvl(ur.req_data_length, 0) +
+                                  l_req_data_length
+       WHERE ur.req_id = p_r.req_id
+         AND rownum = 1;
+    
+      COMMIT WORK;
+    
+      dbms_lob.freetemporary(l_req_data);
+    
+    END;
+  
+    BEGIN
+    
+      utl_http.write_text(p_r.req, p_data);
+    
+    EXCEPTION
+      WHEN OTHERS THEN
+      
+        tsk_http.save_req_step_as_failed(l_step_name, p_r.req_id);
+      
+        RAISE;
+    END;
+  
+  END;
+
+  PROCEDURE write_line(p_r    IN OUT NOCOPY tsk_http.t_req,
+                       p_data IN VARCHAR2 CHARACTER SET ANY_CS) IS
+    PRAGMA AUTONOMOUS_TRANSACTION;
+    l_step_name CONSTANT VARCHAR2(30) := 'WRITE_LINE';
+  
+  BEGIN
+  
+    DECLARE
+    
+      l_req_data_length PLS_INTEGER;
+    
+      l_req_data CLOB;
+    
+    BEGIN
+    
+      dbms_lob.createtemporary(l_req_data, TRUE);
+    
+      tsk_lob.append(l_req_data, to_clob(p_data));
+    
+      l_req_data_length := length(l_req_data);
+    
+      UPDATE utl_requests ur
+         SET ur.req_data        = ur.req_data || l_req_data,
+             ur.req_data_length = nvl(ur.req_data_length, 0) +
+                                  l_req_data_length
+       WHERE ur.req_id = p_r.req_id
+         AND rownum = 1;
+    
+      COMMIT WORK;
+    
+      dbms_lob.freetemporary(l_req_data);
+    
+    END;
+  
+    BEGIN
+    
+      utl_http.write_line(p_r.req, p_data);
+    
+    EXCEPTION
+      WHEN OTHERS THEN
+      
+        tsk_http.save_req_step_as_failed(l_step_name, p_r.req_id);
+      
+        RAISE;
+    END;
+  END;
+
+  PROCEDURE write_raw(p_r IN OUT NOCOPY tsk_http.t_req, p_data IN RAW) IS
+    PRAGMA AUTONOMOUS_TRANSACTION;
+    l_step_name CONSTANT VARCHAR2(30) := 'WRITE_RAW';
+  
+  BEGIN
+  
+    DECLARE
+    
+      l_req_data_length PLS_INTEGER;
+    
+      l_req_data CLOB;
+    
+    BEGIN
+    
+      dbms_lob.createtemporary(l_req_data, TRUE);
+    
+      tsk_lob.append(l_req_data, to_clob(utl_raw.cast_to_varchar2(p_data)));
+    
+      l_req_data_length := length(l_req_data);
+    
+      UPDATE utl_requests ur
+         SET ur.req_data        = ur.req_data || l_req_data,
+             ur.req_data_length = nvl(ur.req_data_length, 0) +
+                                  l_req_data_length
+       WHERE ur.req_id = p_r.req_id
+         AND rownum = 1;
+    
+      COMMIT WORK;
+    
+      dbms_lob.freetemporary(l_req_data);
+    
+    END;
+  
+    BEGIN
+    
+      utl_http.write_raw(p_r.req, p_data);
+    
+    EXCEPTION
+      WHEN OTHERS THEN
+      
+        tsk_http.save_req_step_as_failed(l_step_name, p_r.req_id);
+      
+        RAISE;
+    END;
+  
+  END;
+
+  FUNCTION get_response(p_r                    IN OUT NOCOPY tsk_http.t_req,
+                        p_return_info_response BOOLEAN DEFAULT FALSE)
+    RETURN tsk_http.t_resp IS
+    PRAGMA AUTONOMOUS_TRANSACTION;
+    l_step_name CONSTANT VARCHAR2(30) := 'GET_RESPONSE';
+  
+    l_utl_resp utl_http.resp;
+  
+  BEGIN
+  
+    BEGIN
+    
+      l_utl_resp := utl_http.get_response(p_r.req, p_return_info_response);
+    
+    EXCEPTION
+      WHEN OTHERS THEN
+        tsk_http.save_req_as_failed(l_step_name, p_r.req_id);
+        RAISE;
+    END;
+  
+    resp.req_id := p_r.req_id;
+  
+    resp.resp := l_utl_resp;
+  
+    UPDATE utl_requests ur
+       SET ur.resp_http_status_code = l_utl_resp.status_code
+     WHERE ur.req_id = p_r.req_id
+       AND rownum = 1;
+  
+    COMMIT WORK;
+  
+    RETURN resp;
+  
+  END;
+
+  FUNCTION begin_request(p_url          IN VARCHAR2,
+                         p_method       IN VARCHAR2 DEFAULT 'GET',
+                         p_http_version IN VARCHAR2 DEFAULT utl_http.HTTP_VERSION_1_1)
+    RETURN tsk_http.t_req IS
+    PRAGMA AUTONOMOUS_TRANSACTION;
+  
+    l_step_name CONSTANT VARCHAR2(30) := 'BEGIN_REQUEST';
+  
+  BEGIN
+  
+    owa_util.who_called_me(g_who_called_req_owner,
+                           g_who_called_req_name,
+                           g_who_called_req_lineno,
+                           g_who_called_req_caller_t);
+  
+    INSERT INTO utl_requests ur
+      (ur.req_id,
+       ur.req_status,
+       ur.req_start_user,
+       ur.req_start_timestamp,
+       ur.who_called_req_name,
+       ur.who_called_req_owner,
+       ur.who_called_req_lineno,
+       ur.who_called_req_caller_t,
+       ur.req_url,
+       ur.req_http_method,
+       ur.req_http_version,
+       ur.req_timeout,
+       ur.req_step_name,
+       ur.req_body_charset,
+       ur.format_call_stack)
+    VALUES
+      (utl_req_id#.nextval,
+       UTL_REQUEST_STATUS_STARTED,
+       USER,
+       SYSTIMESTAMP,
+       g_who_called_req_name,
+       g_who_called_req_owner,
+       g_who_called_req_lineno,
+       g_who_called_req_caller_t,
+       p_url,
+       p_method,
+       p_http_version,
+       g_http_transfer_timeout,
+       l_step_name,
+       g_req_body_charset,
+       substr(dbms_utility.format_call_stack, 1, 4000))
+    RETURNING ur.req_id INTO g_req_id;
+  
+    IF TRIM(g_wallet_path) IS NOT NULL THEN
+    
+      INSERT INTO utl_requests_wallets urw
+        (urw.req_wallet_id,
+         urw.req_wallet_path,
+         urw.req_wallet_pasword,
+         urw.req_id)
+      VALUES
+        (utl_req_wallet_id#.nextval,
+         g_wallet_path,
+         g_wallet_password,
+         g_req_id);
+    
+    END IF;
+  
+    COMMIT WORK;
+  
+    BEGIN
+    
+      req.req := utl_http.begin_request(p_url, p_method, p_http_version);
+    EXCEPTION
+      WHEN OTHERS THEN
+      
+        tsk_http.save_req_as_failed(l_step_name, g_req_id);
+      
+        RAISE;
+    END;
+  
+    req.req_id := g_req_id;
+  
+    RETURN req;
+  
+  END;
+
+  PROCEDURE end_response(p_r IN OUT NOCOPY utl_http.resp) IS
+  BEGIN
+  
+    utl_http.end_response(p_r);
+  
+  EXCEPTION
+    WHEN OTHERS THEN
+      RAISE;
+  END;
+
+  PROCEDURE end_response(p_r IN OUT NOCOPY tsk_http.t_resp) IS
+    PRAGMA AUTONOMOUS_TRANSACTION;
+    l_step_name CONSTANT VARCHAR2(30) := 'END_RESPONSE';
+  
+  BEGIN
+  
+    BEGIN
+    
+      tsk_http.end_response(p_r.resp);
+    
+    EXCEPTION
+      WHEN OTHERS THEN
+      
+        tsk_http.save_req_as_failed(l_step_name, p_r.req_id);
+      
+        RAISE;
+    END;
+  
+    UPDATE utl_requests ur
+       SET ur.req_status                = UTL_REQUEST_STATUS_ENDED,
+           ur.req_step_name             = l_step_name,
+           ur.req_http_detailed_sqlcode = utl_http.get_detailed_sqlcode,
+           ur.req_end_timestamp         = SYSTIMESTAMP,
+           ur.req_end_user              = USER
+     WHERE ur.req_id = p_r.req_id
+       AND rownum = 1;
+  
+    COMMIT WORK;
+  
+  END;
+
+  PROCEDURE set_header(p_r     IN OUT NOCOPY tsk_http.t_req,
+                       p_name  IN VARCHAR2,
+                       p_value IN VARCHAR2 DEFAULT NULL) IS
+    PRAGMA AUTONOMOUS_TRANSACTION;
+    l_step_name CONSTANT VARCHAR2(30) := 'SET_HEADER';
+  
+  BEGIN
+  
+    BEGIN
+    
+      INSERT INTO utl_requests_headers
+        (header_id, header_name, header_value, req_id)
+      VALUES
+        (utl_req_headers_id#.nextval, p_name, p_value, p_r.req_id);
+    
+      utl_http.set_header(p_r.req, p_name, p_value);
+    
+      COMMIT WORK;
+    
+    EXCEPTION
+      WHEN OTHERS THEN
+      
+        tsk_http.save_req_as_failed(l_step_name, p_r.req_id);
+      
+        RAISE;
+    END;
+  
+  END;
+
+  PROCEDURE set_transfer_timeout(p_timeout IN PLS_INTEGER DEFAULT 60) IS
+  
+    l_step_name CONSTANT VARCHAR2(30) := 'SET_TRANSFER_TIMEOUT';
+  
+  BEGIN
+  
+    BEGIN
+    
+      utl_http.set_transfer_timeout(p_timeout);
+    
+      g_http_transfer_timeout := p_timeout;
+    
+    EXCEPTION
+      WHEN OTHERS THEN
+      
+        tsk_http.save_req_as_failed(l_step_name, g_req_id);
+      
+        RAISE;
+      
+    END;
+  
+  END;
+
+  PROCEDURE set_body_charset(p_charset IN VARCHAR2 DEFAULT NULL) IS
+    PRAGMA AUTONOMOUS_TRANSACTION;
+    l_step_name CONSTANT VARCHAR2(30) := 'SET_BODY_CHARSET';
+  
+  BEGIN
+  
+    BEGIN
+    
+      g_req_body_charset := p_charset;
+    
+      utl_http.set_body_charset(p_charset);
+    
+    EXCEPTION
+      WHEN OTHERS THEN
+      
+        tsk_http.save_req_step_as_failed(l_step_name, g_req_id);
+      
+        RAISE;
+    END;
+  
+  END;
+
+  PROCEDURE set_response_error_check(enable IN BOOLEAN DEFAULT FALSE) IS
+    PRAGMA AUTONOMOUS_TRANSACTION;
+    l_step_name CONSTANT VARCHAR2(30) := 'SET_RESPONSE_ERROR_CHECK';
+  
+  BEGIN
+  
+    BEGIN
+    
+      utl_http.set_response_error_check(enable);
+    
+    EXCEPTION
+      WHEN OTHERS THEN
+      
+        tsk_http.save_req_step_as_failed(l_step_name, g_req_id);
+      
+        RAISE;
+    END;
+  
+  END;
+
+  PROCEDURE read_text(p_r    IN OUT NOCOPY tsk_http.t_resp,
+                      p_data OUT NOCOPY VARCHAR2 CHARACTER SET ANY_CS,
+                      p_len  IN PLS_INTEGER DEFAULT NULL) IS
+    PRAGMA AUTONOMOUS_TRANSACTION;
+    l_step_name CONSTANT VARCHAR2(30) := 'READ_TEXT';
+  
+  BEGIN
+  
+    BEGIN
+    
+      utl_http.read_text(p_r.resp, p_data, p_len);
+    
+    EXCEPTION
+      WHEN OTHERS THEN
+      
+        tsk_http.save_req_step_as_failed(l_step_name, p_r.req_id);
+      
+        RAISE;
+    END;
+  
+    DECLARE
+    
+      l_resp_data_length PLS_INTEGER;
+    
+      l_resp_data CLOB;
+    
+    BEGIN
+    
+      dbms_lob.createtemporary(l_resp_data, TRUE);
+    
+      tsk_lob.append(l_resp_data, to_clob(p_data));
+    
+      l_resp_data_length := length(l_resp_data);
+    
+      UPDATE utl_requests ur
+         SET ur.resp_data        = ur.resp_data || l_resp_data,
+             ur.resp_data_length = nvl(ur.resp_data_length, 0) +
+                                   l_resp_data_length
+       WHERE ur.req_id = p_r.req_id
+         AND rownum = 1;
+    
+      dbms_lob.freetemporary(l_resp_data);
+    
+      COMMIT WORK;
+    
+    END;
+  
+  END;
+
+  PROCEDURE read_line(p_r           IN OUT NOCOPY tsk_http.t_resp,
+                      p_data        OUT NOCOPY VARCHAR2 CHARACTER SET ANY_CS,
+                      p_remove_crlf IN BOOLEAN DEFAULT FALSE) IS
+    PRAGMA AUTONOMOUS_TRANSACTION;
+    l_step_name CONSTANT VARCHAR2(30) := 'READ_LINE';
+  
+  BEGIN
+  
+    BEGIN
+    
+      utl_http.read_line(p_r.resp, p_data, p_remove_crlf);
+    
+    EXCEPTION
+      WHEN OTHERS THEN
+      
+        tsk_http.save_req_step_as_failed(l_step_name, p_r.req_id);
+      
+        RAISE;
+    END;
+  
+    DECLARE
+    
+      l_resp_data_length PLS_INTEGER;
+    
+      l_resp_data CLOB;
+    
+    BEGIN
+    
+      dbms_lob.createtemporary(l_resp_data, TRUE);
+    
+      tsk_lob.append(l_resp_data, to_clob(p_data));
+    
+      l_resp_data_length := length(l_resp_data);
+    
+      UPDATE utl_requests ur
+         SET ur.resp_data        = ur.resp_data || l_resp_data,
+             ur.resp_data_length = nvl(ur.resp_data_length, 0) +
+                                   l_resp_data_length
+       WHERE ur.req_id = p_r.req_id
+         AND rownum = 1;
+    
+      dbms_lob.freetemporary(l_resp_data);
+    
+      COMMIT WORK;
+    
+    END;
+  
+  END;
+
+  PROCEDURE read_raw(p_r    IN OUT NOCOPY tsk_http.t_resp,
+                     p_data OUT NOCOPY RAW,
+                     p_len  IN PLS_INTEGER DEFAULT NULL) IS
+    PRAGMA AUTONOMOUS_TRANSACTION;
+    l_step_name CONSTANT VARCHAR2(30) := 'READ_RAW';
+  
+  BEGIN
+  
+    BEGIN
+    
+      utl_http.read_raw(p_r.resp, p_data, p_len);
+    
+    EXCEPTION
+      WHEN OTHERS THEN
+      
+        tsk_http.save_req_step_as_failed(l_step_name, p_r.req_id);
+      
+        RAISE;
+    END;
+  
+    DECLARE
+    
+      l_resp_data_length PLS_INTEGER;
+    
+      l_resp_data CLOB;
+    
+    BEGIN
+    
+      dbms_lob.createtemporary(l_resp_data, TRUE);
+    
+      tsk_lob.append(l_resp_data,
+                     to_clob(utl_raw.cast_to_varchar2(p_data)));
+    
+      l_resp_data_length := length(l_resp_data);
+    
+      UPDATE utl_requests ur
+         SET ur.resp_data        = ur.resp_data || l_resp_data,
+             ur.resp_data_length = nvl(ur.resp_data_length, 0) +
+                                   l_resp_data_length
+       WHERE ur.req_id = p_r.req_id
+         AND rownum = 1;
+    
+      dbms_lob.freetemporary(l_resp_data);
+    
+      COMMIT WORK;
+    
+    END;
+  
+  END;
+
+  PROCEDURE set_wallet(p_path     IN VARCHAR2,
+                       p_password IN VARCHAR2 DEFAULT NULL) IS
+  
+    l_step_name CONSTANT VARCHAR2(30) := 'SET_WALLET';
+  
+  BEGIN
+  
+    g_wallet_path     := p_path;
+    g_wallet_password := p_password;
+  
+    BEGIN
+    
+      utl_http.set_wallet(p_path, p_password);
+    
+    EXCEPTION
+      WHEN OTHERS THEN
+      
+        RAISE;
+      
+    END;
+  
+  END;
+
+  PROCEDURE set_authentication(p_r         IN OUT NOCOPY tsk_http.t_req,
+                               p_username  IN VARCHAR2,
+                               p_password  IN VARCHAR2 DEFAULT NULL,
+                               p_scheme    IN VARCHAR2 DEFAULT 'Basic',
+                               p_for_proxy IN BOOLEAN DEFAULT FALSE) IS
+  
+    l_step_name CONSTANT VARCHAR2(30) := 'SET_AUTHENTICATION';
+  
+    l_for_procy PLS_INTEGER := 0;
+  
+  BEGIN
+  
+    IF p_for_proxy THEN
+      l_for_procy := 1;
+    END IF;
+  
+    INSERT INTO utl_requests_auth
+      (req_auth_id, username, password, scheme, for_proxy, req_id)
+    VALUES
+      (utl_req_auth_id#.nextval,
+       p_username,
+       p_password,
+       p_scheme,
+       l_for_procy,
+       p_r.req_id);
+  
+    BEGIN
+    
+      utl_http.set_authentication(p_r.req,
+                                  p_username,
+                                  p_password,
+                                  p_scheme,
+                                  p_for_proxy);
+    
+    EXCEPTION
+      WHEN OTHERS THEN
+      
+        tsk_http.save_req_step_as_failed(l_step_name, p_r.req_id);
+      
+        RAISE;
+      
+    END;
+  
+  END;
+
+  PROCEDURE get_header_by_name(p_r     IN OUT NOCOPY tsk_http.t_resp,
+                               p_name  IN VARCHAR2,
+                               p_value OUT NOCOPY VARCHAR2,
+                               p_n     IN PLS_INTEGER DEFAULT 1) IS
+  
+    l_step_name CONSTANT VARCHAR2(30) := 'GET_HEADER_BY_NAME';
+  
+  BEGIN
+    BEGIN
+    
+      utl_http.get_header_by_name(p_r.resp, p_name, p_value, p_n);
+    
+    EXCEPTION
+      WHEN OTHERS THEN
+      
+        tsk_http.save_req_step_as_failed(l_step_name, p_r.req_id);
+      
+        RAISE;
+      
+    END;
+  END;
+
+  PROCEDURE get_authentication(p_r         IN OUT NOCOPY tsk_http.t_resp,
+                               p_scheme    OUT NOCOPY VARCHAR2,
+                               p_realm     OUT NOCOPY VARCHAR2,
+                               p_for_proxy IN BOOLEAN DEFAULT FALSE) IS
+  
+    l_step_name CONSTANT VARCHAR2(30) := 'GET_AUTHENTICATION';
+  
+  BEGIN
+    BEGIN
+    
+      utl_http.get_authentication(p_r.resp, p_scheme, p_realm, p_for_proxy);
+    
+    EXCEPTION
+      WHEN OTHERS THEN
+      
+        tsk_http.save_req_step_as_failed(l_step_name, p_r.req_id);
+      
+        RAISE;
+      
+    END;
+  END;
+
+  FUNCTION get_detailed_sqlerrm RETURN VARCHAR2 IS
+  BEGIN
+    RETURN get_detailed_sqlerrm;
+  END;
+
+  FUNCTION request(p_url             IN VARCHAR2,
+                   p_proxy           in VARCHAR2 DEFAULT NULL,
+                   p_wallet_path     IN VARCHAR2 DEFAULT NULL,
+                   p_wallet_password IN VARCHAR2 DEFAULT NULL)
+    RETURN VARCHAR2 IS
+    PRAGMA AUTONOMOUS_TRANSACTION;
+  
+    l_step_name CONSTANT VARCHAR2(30) := 'REQUEST';
+    l_req_id           PLS_INTEGER;
+    l_resp_data        VARCHAR2(4000);
+    l_resp_data_length PLS_INTEGER;
+  
+  BEGIN
+  
+    owa_util.who_called_me(g_who_called_req_owner,
+                           g_who_called_req_name,
+                           g_who_called_req_lineno,
+                           g_who_called_req_caller_t);
+  
+    INSERT INTO utl_requests ur
+      (ur.req_id,
+       ur.req_status,
+       ur.req_start_user,
+       ur.req_start_timestamp,
+       ur.who_called_req_name,
+       ur.who_called_req_owner,
+       ur.who_called_req_lineno,
+       ur.who_called_req_caller_t,
+       ur.req_url,
+       ur.req_http_method,
+       ur.req_http_version,
+       ur.req_timeout,
+       ur.req_step_name,
+       ur.format_call_stack)
+    VALUES
+      (utl_req_id#.nextval,
+       UTL_REQUEST_STATUS_STARTED,
+       USER,
+       SYSTIMESTAMP,
+       g_who_called_req_name,
+       g_who_called_req_owner,
+       g_who_called_req_lineno,
+       g_who_called_req_caller_t,
+       p_url,
+       'GET',
+       utl_http.HTTP_VERSION_1_1,
+       g_http_transfer_timeout,
+       l_step_name,
+       substr(dbms_utility.format_call_stack, 1, 4000))
+    RETURNING ur.req_id INTO l_req_id;
+  
+    IF TRIM(p_wallet_path) IS NOT NULL THEN
+    
+      INSERT INTO utl_requests_wallets urw
+        (urw.req_wallet_id,
+         urw.req_wallet_path,
+         urw.req_wallet_pasword,
+         urw.req_id)
+      VALUES
+        (utl_req_wallet_id#.nextval,
+         p_wallet_path,
+         p_wallet_password,
+         l_req_id);
+    
+    END IF;
+  
+    COMMIT WORK;
+  
+    BEGIN
+    
+      l_resp_data := utl_http.request(p_url,
+                                      p_proxy,
+                                      p_wallet_path,
+                                      p_wallet_password);
+    
+    EXCEPTION
+      WHEN OTHERS THEN
+        tsk_http.save_req_as_failed(l_step_name, l_req_id);
+        RAISE;
+    END;
+  
+    l_resp_data_length := length(l_resp_data);
+  
+    UPDATE utl_requests ur
+       SET ur.req_status        = UTL_REQUEST_STATUS_ENDED,
+           ur.req_step_name     = l_step_name,
+           ur.resp_data         = l_resp_data,
+           ur.resp_data_length  = nvl(l_resp_data_length, 0),
+           ur.req_end_timestamp = SYSTIMESTAMP,
+           ur.req_end_user      = USER
+     WHERE ur.req_id = l_req_id
+       AND rownum = 1;
+  
+    COMMIT WORK;
+  
+    RETURN l_resp_data;
+  
+  END;
+
+  FUNCTION request_pieces(p_url             IN VARCHAR2,
+                          p_max_pieces      IN NATURAL DEFAULT 32767,
+                          p_proxy           in VARCHAR2 DEFAULT NULL,
+                          p_wallet_path     IN VARCHAR2 DEFAULT NULL,
+                          p_wallet_password IN VARCHAR2 DEFAULT NULL)
+    RETURN t_html_pieces IS
+  
+    PRAGMA AUTONOMOUS_TRANSACTION;
+  
+    l_step_name CONSTANT VARCHAR2(30) := 'REQUEST_PIECES';
+    l_req_id PLS_INTEGER;
+  
+    l_html_pieces t_html_pieces;
+  
+    l_resp_data CLOB;
+  
+    l_resp_data_length PLS_INTEGER;
+  
+  BEGIN
+  
+    INSERT INTO utl_requests ur
+      (ur.req_id,
+       ur.req_status,
+       ur.req_start_user,
+       ur.req_start_timestamp,
+       ur.who_called_req_name,
+       ur.who_called_req_owner,
+       ur.who_called_req_lineno,
+       ur.who_called_req_caller_t,
+       ur.req_url,
+       ur.req_http_method,
+       ur.req_http_version,
+       ur.req_timeout,
+       ur.req_step_name,
+       ur.format_call_stack)
+    VALUES
+      (utl_req_id#.nextval,
+       UTL_REQUEST_STATUS_STARTED,
+       USER,
+       SYSTIMESTAMP,
+       g_who_called_req_name,
+       g_who_called_req_owner,
+       g_who_called_req_lineno,
+       g_who_called_req_caller_t,
+       p_url,
+       'GET',
+       utl_http.HTTP_VERSION_1_1,
+       g_http_transfer_timeout,
+       l_step_name,
+       substr(dbms_utility.format_call_stack, 1, 4000))
+    RETURNING ur.req_id INTO l_req_id;
+  
+    COMMIT WORK;
+  
+    BEGIN
+    
+      l_html_pieces.html_pieces := utl_http.request_pieces(p_url,
+                                                           p_max_pieces,
+                                                           p_proxy,
+                                                           p_wallet_path,
+                                                           p_wallet_password);
+    
+    EXCEPTION
+      WHEN OTHERS THEN
+        tsk_http.save_req_as_failed(l_step_name, l_req_id);
+        RAISE;
+    END;
+  
+    dbms_lob.createtemporary(l_resp_data, TRUE);
+  
+    FOR i IN 1 .. l_html_pieces.html_pieces.count LOOP
+      tsk_lob.append(l_resp_data, to_clob(l_html_pieces.html_pieces(i)));
+    END LOOP;
+  
+    l_resp_data_length := length(l_resp_data);
+  
+    UPDATE utl_requests ur
+       SET ur.req_status        = UTL_REQUEST_STATUS_ENDED,
+           ur.req_step_name     = l_step_name,
+           ur.req_end_timestamp = SYSTIMESTAMP,
+           ur.req_end_user      = USER,
+           ur.resp_data         = l_resp_data,
+           ur.resp_data_length  = l_resp_data_length
+     WHERE ur.req_id = l_req_id
+       AND rownum = 1;
+  
+    dbms_lob.freetemporary(l_resp_data);
+  
+    COMMIT WORK;
+  
+    RETURN l_html_pieces;
+  
+  END;
+
+  FUNCTION repeat_request(p_req_id IN PLS_INTEGER) RETURN PLS_INTEGER IS
+    CURSOR c_requests(p_req_id IN PLS_INTEGER) IS
+      SELECT /*+first_rows(1)*/
+       r.req_id,
+       r.req_timeout,
+       r.req_data,
+       r.req_url,
+       r.req_http_method,
+       r.req_http_version
+        FROM utl_requests r
+       WHERE r.req_id = p_req_id;
+  
+    TYPE t_request IS RECORD(
+      req_id           PLS_INTEGER,
+      req_timeout      PLS_INTEGER,
+      req_data         CLOB,
+      req_url          VARCHAR2(4000),
+      req_http_method  VARCHAR2(64),
+      req_http_version VARCHAR2(64));
+  
+    l_request t_request;
+  
+    CURSOR c_requests_wallets(p_req_id IN PLS_INTEGER) IS
+      SELECT /*+first_rows(1)*/
+       rw.req_wallet_id, rw.req_wallet_path, rw.req_wallet_pasword
+        FROM utl_requests_wallets rw
+       WHERE rw.req_id = p_req_id;
+  
+    TYPE t_requests_wallet IS RECORD(
+      req_wallet_id      PLS_INTEGER,
+      req_wallet_path    VARCHAR2(4000),
+      req_wallet_pasword VARCHAR2(4000));
+  
+    TYPE t_requests_wallets IS TABLE OF t_requests_wallet INDEX BY BINARY_INTEGER;
+  
+    l_requests_wallets t_requests_wallets;
+  
+    CURSOR c_requests_headers(p_req_id IN PLS_INTEGER) IS
+      SELECT /*+first_rows(1)*/
+       rh.header_id, rh.header_name, rh.header_value
+        FROM utl_requests_headers rh
+       WHERE rh.req_id = p_req_id;
+  
+    TYPE t_requests_header IS RECORD(
+      header_id    VARCHAR2(4000),
+      header_name  VARCHAR2(4000),
+      header_value VARCHAR2(4000));
+  
+    TYPE t_requests_headers IS TABLE OF t_requests_header INDEX BY BINARY_INTEGER;
+  
+    l_requests_headers t_requests_headers;
+  
+    CURSOR c_requests_auth(p_req_id IN PLS_INTEGER) IS
+      SELECT /*+first_rows(1)*/
+       ra.username, ra.password, ra.scheme, ra.for_proxy
+        FROM utl_requests_auth ra
+       WHERE ra.req_id = p_req_id;
+  
+    TYPE t_requests_auth IS RECORD(
+      username  VARCHAR2(4000),
+      password  VARCHAR2(4000),
+      scheme    VARCHAR2(4000),
+      for_proxy NUMBER);
+  
+    l_requests_auth t_requests_auth;
+  
+    l_i PLS_INTEGER := 1;
+  
+    l_req  tsk_http.t_req;
+    l_resp tsk_http.t_resp;
+  
+    l_len         NUMBER := 32767;
+    l_txt         VARCHAR2(32767);
+    l_chunkStart  NUMBER := 1;
+    l_chunkData   VARCHAR2(32767);
+    l_chunkLength NUMBER := 32767;
+    l_raw_data    RAW(512);
+    l_buffer_size NUMBER(10) := 512;
+    l_resp_data   CLOB;
+  
+  BEGIN
+  
+    OPEN c_requests(p_req_id);
+    FETCH c_requests
+      INTO l_request;
+    CLOSE c_requests;
+  
+    IF l_request.req_id IS NULL THEN
+      RAISE no_data_found;
+    END IF;
+  
+    tsk_http.set_transfer_timeout(l_request.req_timeout);
+  
+    OPEN c_requests_wallets(l_request.req_id);
+    FETCH c_requests_wallets BULK COLLECT
+      INTO l_requests_wallets;
+    CLOSE c_requests_wallets;
+  
+    WHILE l_i <= l_requests_wallets.last LOOP
+    
+      tsk_http.set_wallet(l_requests_wallets(l_i).req_wallet_path,
+                          l_requests_wallets(l_i).req_wallet_pasword);
+    
+      l_i := l_requests_wallets.next(l_i);
+    
+    END LOOP;
+  
+    l_req := tsk_http.begin_request(l_request.req_url,
+                                    l_request.req_http_method,
+                                    l_request.req_http_version);
+  
+    OPEN c_requests_auth(p_req_id);
+    FETCH c_requests_auth
+      INTO l_requests_auth;
+    CLOSE c_requests_auth;
+  
+    IF l_requests_auth.username IS NOT NULL THEN
+      tsk_http.set_authentication(l_req,
+                                  l_requests_auth.username,
+                                  l_requests_auth.password,
+                                  l_requests_auth.scheme);
+    
+    END IF;
+  
+    BEGIN
+    
+      OPEN c_requests_headers(l_request.req_id);
+      FETCH c_requests_headers BULK COLLECT
+        INTO l_requests_headers;
+      CLOSE c_requests_headers;
+    
+      WHILE l_i <= l_requests_headers.last LOOP
+      
+        tsk_http.set_header(l_req,
+                            l_requests_headers(l_i).header_name,
+                            l_requests_headers(l_i).header_value);
+      
+        l_i := l_requests_headers.next(l_i);
+      
+      END LOOP;
+    
+      l_chunkData := substr(l_request.req_data, l_chunkStart, l_chunkLength);
+    
+      WHILE length(l_chunkData) > 0 LOOP
+        tsk_http.write_raw(l_req, utl_raw.cast_to_raw(l_chunkData));
+        l_chunkStart := l_chunkStart + l_chunkLength;
+        l_chunkData  := substr(l_request.req_data,
+                               l_chunkStart,
+                               l_chunkLength);
+      END LOOP;
+    
+      l_resp := tsk_http.get_response(l_req);
+    
+    EXCEPTION
+      WHEN OTHERS THEN
+        tsk_http.end_request(l_req);
+        RAISE;
+    END;
+  
+    BEGIN
+    
+      <<response_loop>>
+      LOOP
+        tsk_http.read_raw(l_resp, l_raw_data, l_buffer_size);
+        l_resp_data := l_resp_data || utl_raw.cast_to_varchar2(l_raw_data);
+      END LOOP response_loop;
+    
+    EXCEPTION
+      WHEN end_of_body THEN
+        tsk_http.end_response(l_resp);
+    END;
+  
+    IF l_req.req.private_hndl IS NOT NULL THEN
+      tsk_http.end_request(l_req);
+    END IF;
+  
+    IF l_resp.resp.private_hndl IS NOT NULL THEN
+      tsk_http.end_response(l_resp);
+    END IF;
+  
+    RETURN l_resp.req_id;
+  
+  END;
+
+begin
+
+  --utl_http.set_response_error_check(false);
+  --utl_http.set_detailed_excp_support(true);
+  null;
+end tsk_http;
