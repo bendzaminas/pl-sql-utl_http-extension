@@ -1,0 +1,34 @@
+-- Create table
+create table UTL_REQUESTS_HEADERS
+(
+  header_id    NUMBER not null,
+  header_name  VARCHAR2(256) not null,
+  header_value VARCHAR2(256),
+  req_id       NUMBER not null
+)
+tablespace UTLREQUEST
+  pctfree 10
+  initrans 1
+  maxtrans 255
+  storage
+  (
+    initial 64K
+    next 1M
+    minextents 1
+    maxextents unlimited
+  );
+-- Create/Recreate primary, unique and foreign key constraints 
+alter table UTL_REQUESTS_HEADERS
+  add constraint PK_UTL_REQ_HEADERS primary key (HEADER_ID)
+  using index 
+  tablespace UTLREQUEST
+  pctfree 10
+  initrans 2
+  maxtrans 255
+  storage
+  (
+    initial 64K
+    next 1M
+    minextents 1
+    maxextents unlimited
+  );
