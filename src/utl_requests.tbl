@@ -37,7 +37,7 @@ tablespace UTLREQUEST
     maxextents unlimited
   );
 -- Create/Recreate primary, unique and foreign key constraints 
-alter table TSK.UTL_REQUESTS
+alter table UTL_REQUESTS
   add constraint PK_UTL_REQ primary key (REQ_ID)
   using index 
   tablespace UTLREQUEST
