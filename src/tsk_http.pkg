@@ -1,4 +1,4 @@
-create or replace package tsk.tsk_http is
+create or replace package tsk_http is
 
   init_failed            EXCEPTION; -- The UTL_HTTP pkg initialization failed
   request_failed         EXCEPTION; -- The HTTP request failed (Any HTTP request or response interface when detailed_exception is disabled)
@@ -182,7 +182,7 @@ create or replace package tsk.tsk_http is
 end tsk_http;
 /
 
-create or replace package body tsk.tsk_http is
+create or replace package body tsk_http is
 
   PACKAGE_NAME               constant varchar2(30) := 'TSK_HTTP';
   MAX_LINESIZE               constant binary_integer := 32767;
