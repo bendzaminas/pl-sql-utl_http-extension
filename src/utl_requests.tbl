@@ -51,10 +51,8 @@ alter table TSK.UTL_REQUESTS
     minextents 1
     maxextents unlimited
   );
-alter table TSK.UTL_REQUESTS
+alter table UTL_REQUESTS
   add constraint FK_UTL_REQ_SQL_CODE_01 foreign key (REQ_HTTP_DETAILED_SQLCODE)
   references TSK.SQL_CODES (SQLCODE)
   disable
   novalidate;
--- Grant/Revoke object privileges 
-grant select on TSK.UTL_REQUESTS to TLITM;
